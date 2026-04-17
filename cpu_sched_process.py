@@ -299,7 +299,7 @@ class Scheduler:
 
         # title
         fig.suptitle('CPU Scheduling Simulator', fontsize=16, fontweight='bold',
-                    color='#2c3e50', y=0.98)
+                    color='#2c3e50', y=0.95)
 
         # table section
         ax_table = fig.add_axes([0.02, 0.32, 0.96, 0.60])
@@ -342,7 +342,7 @@ class Scheduler:
                 cell = table[row, col]
                 if row == len(rows):
                     # averages row
-                    cell.set_facecolor('#d5e8d4')
+                    cell.set_facecolor('#d5e8d4')   
                     cell.set_text_props(color='#27ae60', fontweight='bold')
                 elif row % 2 == 0:
                     cell.set_facecolor('#eaf0fb')
@@ -356,7 +356,7 @@ class Scheduler:
                         fontweight='bold', pad=12, loc='left')
 
         # gantt chart
-        ax_gantt = fig.add_axes([0.02, 0.06, 0.96, 0.20])
+        ax_gantt = fig.add_axes([0.02, 0.05, 0.90, 0.18])
         ax_gantt.set_facecolor('#ffffff')
 
         # soft professional colors
