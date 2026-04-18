@@ -1,5 +1,6 @@
 from collections import deque
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 class Process:
     def __init__(self, pid, arrival, burst, priority=0):
@@ -8,7 +9,7 @@ class Process:
         self.arrival = arrival
         self.burst = burst
         self.priority = priority
-        self.remaining = burst #mutable copy of the original data while burst stays the same for original calculations
+        self.remaining = burst  # mutable copy of the original data while burst stays the same for original calculations
         self.end = 0
         self.turnaround = 0
         self.waiting = 0
@@ -16,11 +17,12 @@ class Process:
         self.gantt = []
 
     def fcfs(self, processes):
+        # sort by arrival time so earliest arrival goes first
         processes = sorted(processes, key=lambda p: p.arrival)
         time = 0
         gantt = []
 
-        for p in processes: #if there's an idle process jump time forward and also checks if there's a process that needs to process already
+        for p in processes:  # if theres an idle process jump time forward and also checks if theres a process that needs to process already
             if time < p.arrival:
                 gantt.append(("Idle", time, p.arrival))
                 time = p.arrival
@@ -48,14 +50,15 @@ class Process:
         gantt = []
 
         while remaining:
-            #only considers process that already arrived
+            # only considers processes that have already arrived
             ready = [p for p in remaining if p.arrival <= time]
 
             if not ready:
-                time += 1
+                # jump to the next arrival if no process is ready
+                time = min(p.arrival for p in remaining)
                 continue
-            
-            shortest = min(ready, key=lambda p: p.burst) #picks the one with the shortest burst time
+
+            shortest = min(ready, key=lambda p: p.burst)  # picks the one with the shortest burst time (non-preemptive)
             start = time
             time += shortest.burst
             end = time
@@ -81,11 +84,12 @@ class Process:
         last_pid = None
 
         while len(completed) < len(processes):
-            # filters for the arrived process and unfinished process
+            # filters for arrived and unfinished processes
             ready = [p for p in processes if p.arrival <= time and p.remaining > 0]
 
             if not ready:
-                time += 1
+                # jump to the next arrival instead of stepping one tick at a time
+                time = min(p.arrival for p in processes if p.remaining > 0)
                 continue
 
             current = min(ready, key=lambda p: p.remaining)
@@ -93,12 +97,13 @@ class Process:
             if current.response is None:
                 current.response = time - current.arrival
 
+            # merges consecutive ticks of the same process into one gantt bar
             if last_pid != current.id:
                 gantt.append([current.id, time, time + 1])
             else:
                 gantt[-1][2] += 1
 
-            current.remaining -= 1 #runs one at a time so it can preempt at every tick
+            current.remaining -= 1  # runs one time unit at a time so it can preempt at every tick
             time += 1
             last_pid = current.id
 
@@ -122,20 +127,23 @@ class Process:
         processes = sorted(processes, key=lambda p: p.arrival)
         i = 0
 
-        while len(completed) < len(processes): #it enqueue all the processes that have arrived by the current time
+        while len(completed) < len(processes):
+            # enqueues all processes that have arrived by the current time
             while i < len(processes) and processes[i].arrival <= time:
                 queue.append(processes[i])
                 i += 1
 
             if not queue:
-                time += 1
+                # jump to next arrival if queue is empty
+                time = processes[i].arrival
                 continue
 
             current = queue.popleft()
 
             if current.response is None:
                 current.response = time - current.arrival
-            # runs whichever has the smaller quantum or what's left
+
+            # runs whichever is smaller the quantum or what's left
             exec_time = min(quantum, current.remaining)
             start = time
             time += exec_time
@@ -144,6 +152,7 @@ class Process:
             gantt.append((current.id, start, end))
             current.remaining -= exec_time
 
+            # checks for new arrivals after time has advanced
             while i < len(processes) and processes[i].arrival <= time:
                 queue.append(processes[i])
                 i += 1
@@ -154,7 +163,7 @@ class Process:
                 current.waiting = current.turnaround - current.burst
                 completed.append(current)
             else:
-                queue.append(current)
+                queue.append(current)  # unfinished process goes to the back of the queue
 
         avg_wt = sum(p.waiting for p in completed) / len(completed)
         avg_tat = sum(p.turnaround for p in completed) / len(completed)
@@ -171,12 +180,13 @@ class Process:
             ready = [p for p in remaining if p.arrival <= time]
 
             if not ready:
-                time += 1
+                # jump to next arrival
+                time = min(p.arrival for p in remaining)
                 continue
 
-            #controls whether lower number is equal to higher priority or vice versa
+            # controls whether lower number = higher priority or higher number = higher priority
             key_func = (lambda p: p.priority) if higher_priority_smaller else (lambda p: -p.priority)
-            #it picks the best priority process from those already arrived
+            # picks the best-priority process from those already arrived, runs to completion without interruption
             current = min(ready, key=key_func)
 
             start = time
@@ -197,7 +207,7 @@ class Process:
 
         return completed, avg_wt, avg_tat, gantt
 
-    def priority_preemptive(self, processes, higher_priority_smaller=True): #almost the same as srt
+    def priority_preemptive(self, processes, higher_priority_smaller=True):  # almost the same as srt
         time = 0
         completed = []
         gantt = []
@@ -207,7 +217,8 @@ class Process:
             ready = [p for p in processes if p.arrival <= time and p.remaining > 0]
 
             if not ready:
-                time += 1
+                # jump to next arrival
+                time = min(p.arrival for p in processes if p.remaining > 0)
                 continue
 
             key_func = (lambda p: p.priority) if higher_priority_smaller else (lambda p: -p.priority)
@@ -216,6 +227,7 @@ class Process:
             if current.response is None:
                 current.response = time - current.arrival
 
+            # merges consecutive ticks of the same process into one gantt bar
             if last_pid != current.id:
                 gantt.append([current.id, time, time + 1])
             else:
@@ -241,7 +253,7 @@ class Process:
         completed = []
         gantt = []
 
-        #sorted by priority each iteration when a new process arrivad
+        # sorted by priority each iteration so newly arrived higher-priority processes jump ahead
         remaining = sorted(processes, key=lambda p: (p.arrival, p.priority if higher_priority_smaller else -p.priority))
         queue = deque()
         i = 0
@@ -251,11 +263,13 @@ class Process:
                 queue.append(remaining[i])
                 i += 1
 
+            # re-sort queue by priority after adding new arrivals
             sorted_queue = sorted(queue, key=lambda p: p.priority if higher_priority_smaller else -p.priority)
             queue = deque(sorted_queue)
 
             if not queue:
-                time += 1
+                # jump to next arrival
+                time = remaining[i].arrival
                 continue
 
             current = queue.popleft()
@@ -288,121 +302,241 @@ class Process:
         return completed, avg_wt, avg_tat, gantt
 
 
+# color pallete
+PALETTE = ['#4C9BE8', '#E8834C', '#4CE8A0', '#E8D44C',
+           '#A04CE8', '#4CE8E0', '#E84C6B', '#8BE84C']
+HEADER_COLOR  = '#1a2744'
+ROW_ODD       = '#ffffff'
+ROW_EVEN      = '#f0f4ff'
+AVG_ROW_BG    = '#e8f5e9'
+AVG_ROW_FG    = '#2e7d32'
+TEXT_DARK     = '#1a2744'
+BG_COLOR      = '#f7f9fc'
+IDLE_COLOR    = '#c8d0dc'
+STARVATION_BG = '#fff0f0'   # light red background for starved processes
+STARVATION_FG = '#c0392b'   # red text for starved processes
+
+# starvation threshold 
+STARVATION_THRESHOLD = 20
+
+
 class Scheduler:
     def __init__(self, processes):
         self.processes = processes
         self.gantt = []
 
-    def draw_gantt_chart(self, gantt, result, avg_wt, avg_tat, show_priority=False):
-        fig = plt.figure(figsize=(14, 7))
-        fig.patch.set_facecolor('#f5f6fa')
+    def draw_gantt_chart(self, gantt, result, avg_wt, avg_tat, algo_name='', show_priority=False):
 
-        # title
-        fig.suptitle('CPU Scheduling Simulator', fontsize=16, fontweight='bold',
-                    color='#2c3e50', y=0.95)
+        total_time = max(p.end for p in result)
 
-        # table section
-        ax_table = fig.add_axes([0.02, 0.32, 0.96, 0.60])
-        ax_table.set_facecolor('#f5f6fa')
+        # cpu utilization how much of total time the CPU was actually busy
+        idle_time = sum(e - s for pid, s, e in gantt if pid == 'Idle')
+        cpu_util  = ((total_time - idle_time) / total_time * 100) if total_time > 0 else 100.0
+
+        # throughput processes completed per unit time
+        throughput = len(result) / total_time if total_time > 0 else 0.0
+
+        # flag starved processes waiting time above threshold
+        starved = {p.id for p in result if p.waiting > STARVATION_THRESHOLD}
+
+        n_rows  = len(result) + 2   # +1 header +1 avg row
+
+        # dynamically size figure height based on number of process rows
+        fig_h = max(7.5, 3.0 + n_rows * 0.48 + 2.2)
+        fig = plt.figure(figsize=(15, fig_h))
+        fig.patch.set_facecolor(BG_COLOR)
+
+        # gridspec
+        gs = gridspec.GridSpec(
+            4, 1,
+            figure=fig,
+            hspace=0.0,
+            height_ratios=[0.10, 0.58, 0.08, 0.24],
+            left=0.04, right=0.96,
+            top=0.97, bottom=0.05
+        )
+
+        # title banner
+        ax_title = fig.add_subplot(gs[0])
+        ax_title.set_facecolor(HEADER_COLOR)
+        ax_title.axis('off')
+        ax_title.text(0.5, 0.65, 'CPU Scheduling Simulator',
+                      ha='center', va='center', transform=ax_title.transAxes,
+                      fontsize=15, fontweight='bold', color='#1a2744')
+        ax_title.text(0.5, 0.20, f'Algorithm:  {algo_name}',
+                      ha='center', va='center', transform=ax_title.transAxes,
+                      fontsize=9, color='#1a2744')
+
+        # results table
+        ax_table = fig.add_subplot(gs[1])
+        ax_table.set_facecolor(BG_COLOR)
         ax_table.axis('off')
 
+        # response time column is always shown
         if show_priority:
-            headers = ['Process', 'Arrival', 'Burst', 'Priority', 'Waiting', 'Turnaround', 'End']
-            rows = [[p.id, p.arrival, p.burst, p.priority, p.waiting, p.turnaround, p.end] for p in result]
+            headers = ['Process', 'Arrival', 'Burst', 'Priority',
+                       'Response', 'Waiting', 'Turnaround', 'End Time']
+            rows = [[p.id, p.arrival, p.burst, p.priority,
+                     p.response, p.waiting, p.turnaround, p.end]
+                    for p in result]
+            avg_response = sum(p.response for p in result) / len(result)
+            avg_row = ['— Average —', '', '', '',
+                       f'{avg_response:.2f}', f'{avg_wt:.2f}', f'{avg_tat:.2f}', '']
         else:
-            headers = ['Process', 'Arrival', 'Burst', 'Waiting', 'Turnaround', 'End']
-            rows = [[p.id, p.arrival, p.burst, p.waiting, p.turnaround, p.end] for p in result]
+            headers = ['Process', 'Arrival', 'Burst',
+                       'Response', 'Waiting', 'Turnaround', 'End Time']
+            rows = [[p.id, p.arrival, p.burst,
+                     p.response, p.waiting, p.turnaround, p.end]
+                    for p in result]
+            avg_response = sum(p.response for p in result) / len(result)
+            avg_row = ['— Average —', '', '',
+                       f'{avg_response:.2f}', f'{avg_wt:.2f}', f'{avg_tat:.2f}', '']
 
-        if show_priority:
-            avg_row = ['Average', '', '', '', f'{avg_wt:.2f}', f'{avg_tat:.2f}', '']
-        else:
-            avg_row = ['Average', '', '', f'{avg_wt:.2f}', f'{avg_tat:.2f}', '']
         rows.append(avg_row)
 
-        table = ax_table.table(
+        tbl = ax_table.table(
             cellText=rows,
             colLabels=headers,
             loc='center',
-            cellLoc='center'
+            cellLoc='center',
+            bbox=[0.0, 0.0, 1.0, 1.0]
         )
-        table.auto_set_font_size(False)
-        table.set_fontsize(10)
-        table.scale(1, 1.8)
+        tbl.auto_set_font_size(False)
+        tbl.set_fontsize(9.5)
 
-        # header row style
-        for col in range(len(headers)):
-            cell = table[0, col]
-            cell.set_facecolor('#2c3e50')
+        n_cols = len(headers)
+
+        # header row styling
+        for c in range(n_cols):
+            cell = tbl[0, c]
+            cell.set_facecolor(HEADER_COLOR)
             cell.set_text_props(color='white', fontweight='bold')
-            cell.set_edgecolor('#ffffff')
+            cell.set_edgecolor('#2e3f6e')
+            cell.set_height(0.13)
 
-        # data rows style
-        for row in range(1, len(rows) + 1):
-            for col in range(len(headers)):
-                cell = table[row, col]
-                if row == len(rows):
-                    # averages row
-                    cell.set_facecolor('#d5e8d4')   
-                    cell.set_text_props(color='#27ae60', fontweight='bold')
-                elif row % 2 == 0:
-                    cell.set_facecolor('#eaf0fb')
-                    cell.set_text_props(color='#2c3e50')
+        # data + avg rows styling
+        for r in range(1, len(rows) + 1):
+            is_avg     = (r == len(rows))
+            process_id = result[r - 1].id if not is_avg else None
+            is_starved = (process_id in starved) if process_id else False
+
+            for c in range(n_cols):
+                cell = tbl[r, c]
+                cell.set_edgecolor('#d4dbe8')
+                cell.set_height(0.10)
+
+                if is_avg:
+                    cell.set_facecolor(AVG_ROW_BG)
+                    cell.set_text_props(color=AVG_ROW_FG, fontweight='bold')
+                elif is_starved:
+                    # highlight starved processes in red
+                    cell.set_facecolor(STARVATION_BG)
+                    cell.set_text_props(color=STARVATION_FG, fontweight='bold')
+                elif r % 2 == 0:
+                    cell.set_facecolor(ROW_EVEN)
+                    cell.set_text_props(color=TEXT_DARK)
                 else:
-                    cell.set_facecolor('#ffffff')
-                    cell.set_text_props(color='#2c3e50')
-                cell.set_edgecolor('#d0d0d0')
+                    cell.set_facecolor(ROW_ODD)
+                    cell.set_text_props(color=TEXT_DARK)
 
-        ax_table.set_title('Results', color='#2c3e50', fontsize=12,
-                        fontweight='bold', pad=12, loc='left')
+        # starvation warning note below table if any process is flagged
+        if starved:
+            ax_table.text(0.0, -0.01,
+                          f'⚠  Starvation detected (waiting > {STARVATION_THRESHOLD}): '
+                          + ', '.join(sorted(starved)),
+                          transform=ax_table.transAxes,
+                          fontsize=8, color=STARVATION_FG, va='top')
+
+        # metrics strip 
+        ax_metrics = fig.add_subplot(gs[2])
+        ax_metrics.set_facecolor('#eef2fa')
+        ax_metrics.axis('off')
+
+        metrics_text = (
+            f'CPU Utilization:  {cpu_util:.1f}%'
+            f'          |          '
+            f'Throughput:  {throughput:.4f} proc / time unit'
+            f'          |          '
+            f'Total Time:  {total_time}'
+            f'          |          '
+            f'Idle Time:  {idle_time}'
+        )
+        ax_metrics.text(0.5, 0.5, metrics_text,
+                        ha='center', va='center',
+                        transform=ax_metrics.transAxes,
+                        fontsize=9, color=TEXT_DARK)
 
         # gantt chart
-        ax_gantt = fig.add_axes([0.02, 0.05, 0.90, 0.18])
+        ax_gantt = fig.add_subplot(gs[3])
         ax_gantt.set_facecolor('#ffffff')
 
-        # soft professional colors
-        palette = [
-            '#5b9bd5', '#ed7d31', '#a9d18e', '#ffc000',
-            '#7030a0', '#00b0f0', '#ff0000', '#92d050'
-        ]
+        for spine in ax_gantt.spines.values():
+            spine.set_edgecolor('#d4dbe8')
+            spine.set_linewidth(0.8)
+
+        # assign colors to unique process ids
         unique_ids = list(dict.fromkeys(pid for pid, _, _ in gantt))
-        color_map = {pid: palette[i % len(palette)] for i, pid in enumerate(unique_ids)}
+        color_map  = {pid: PALETTE[i % len(PALETTE)] for i, pid in enumerate(unique_ids)}
 
+        bar_h = 0.52
         for pid, start, end in gantt:
-            color = '#bdc3c7' if pid == "Idle" else color_map[pid]
-            ax_gantt.barh(0, end - start, left=start, color=color,
-                        edgecolor='white', height=0.5)
-            ax_gantt.text((start + end) / 2, 0, str(pid), ha='center', va='center',
-                        fontsize=9, fontweight='bold', color='white')
+            color       = IDLE_COLOR if pid == 'Idle' else color_map[pid]
+            label_color = '#888888' if pid == 'Idle' else 'white'
+            ax_gantt.barh(0, end - start, left=start,
+                          color=color, edgecolor='white',
+                          height=bar_h, linewidth=1.2)
+            if end - start > 0:
+                ax_gantt.text((start + end) / 2, 0, str(pid),
+                              ha='center', va='center',
+                              fontsize=8.5, fontweight='bold',
+                              color=label_color)
 
-        # time markers
+        # time tick marks at every boundary
         all_times = sorted(set(t for _, s, e in gantt for t in (s, e)))
         for t in all_times:
-            ax_gantt.axvline(x=t, color='#bdc3c7', linewidth=0.8)
+            ax_gantt.axvline(x=t, color='#c8d0dc', linewidth=0.7, zorder=0)
 
-        ax_gantt.set_xlabel('Time Units', color='#2c3e50', fontsize=10)
         ax_gantt.set_yticks([])
         ax_gantt.set_xticks(all_times)
-        ax_gantt.tick_params(colors='#2c3e50')
-        ax_gantt.set_title('Gantt Chart', color='#2c3e50', fontsize=12,
-                        fontweight='bold', loc='left')
 
-        for spine in ax_gantt.spines.values():
-            spine.set_edgecolor('#d0d0d0')
+        # rotate labels if there are too many time points
+        if len(all_times) > 10:
+            ax_gantt.tick_params(axis='x', colors=TEXT_DARK, labelsize=7, rotation=45)
+        else:
+            ax_gantt.tick_params(axis='x', colors=TEXT_DARK, labelsize=8)
 
-        ax_gantt.set_facecolor('#f9f9f9')
+        ax_gantt.set_xlim(0, all_times[-1])
+        ax_gantt.set_ylim(-0.6, 0.6)
+        ax_gantt.set_xlabel('Time Units', color=TEXT_DARK, fontsize=9, labelpad=4)
+        ax_gantt.text(0.005, 0.93, 'Gantt Chart',
+                      transform=ax_gantt.transAxes,
+                      fontsize=9, fontweight='bold',
+                      color=TEXT_DARK, va='top')
 
         plt.show()
 
-def get_int(prompt, min_val=None): #function to validate each inputs
+
+# helpers
+
+def get_int(prompt, min_val=None):  # keeps prompting until a valid integer is received
     while True:
         try:
             value = int(input(prompt))
-            if min_val is not None and value < min_val: #min_val it enforces a minimum bound if one was given
+            if min_val is not None and value < min_val:  # enforces a minimum bound if one was given
                 print(f"  Please enter a value of at least {min_val}.")
                 continue
             return value
         except ValueError:
             print("  Invalid input. Please enter a whole number.")
+
+
+def get_yes_no(prompt):
+    # keeps asking until the user types exactly y or n
+    while True:
+        answer = input(prompt).strip().lower()
+        if answer in ('y', 'n'):
+            return answer
+        print("  Please enter y or n.")
 
 
 # algorithms that need priority input
@@ -411,79 +545,96 @@ NEEDS_PRIORITY = {5, 6, 7}
 # algorithms that need a quantum input
 NEEDS_QUANTUM = {4, 7}
 
-# main functon
+ALGO_NAMES = {
+    1: 'FCFS — First-Come, First-Served',
+    2: 'SJF — Shortest Job First (Non-Preemptive)',
+    3: 'SRT — Shortest Remaining Time (Preemptive)',
+    4: 'Round Robin',
+    5: 'Priority Scheduling (Non-Preemptive)',
+    6: 'Priority Scheduling (Preemptive)',
+    7: 'Priority + Round Robin',
+}
+
+# main function
 if __name__ == "__main__":
-    print("\nChoose scheduling algorithm:")
-    print("  1. FCFS              (First-Come, First-Served)")
-    print("  2. SJF               (Shortest Job First — non-preemptive)")
-    print("  3. SRT               (Shortest Remaining Time — preemptive)")
-    print("  4. Round Robin")
-    print("  5. Priority          (Non-Preemptive)")
-    print("  6. Priority          (Preemptive)")
-    print("  7. Priority + RR     (Round Robin with Priority)")
+    while True:
 
-    choice = get_int("\nEnter choice (1-7): ", min_val=1)
-    while choice > 7:
-        print("  Invalid choice. Please enter a number between 1 and 7.")
-        choice = get_int("Enter choice (1-7): ", min_val=1)
+        # choose algorithm
+        print("\nChoose scheduling algorithm:")
+        print("  1. FCFS              (First-Come, First-Served)")
+        print("  2. SJF               (Shortest Job First — non-preemptive)")
+        print("  3. SRT               (Shortest Remaining Time — preemptive)")
+        print("  4. Round Robin")
+        print("  5. Priority          (Non-Preemptive)")
+        print("  6. Priority          (Preemptive)")
+        print("  7. Priority + RR     (Round Robin with Priority)")
 
-    # ask for quantum if needed
-    quantum = None
-    if choice in NEEDS_QUANTUM:
-        quantum = get_int("Enter Time Quantum: ", min_val=1)
+        # catches values above valid range, get_int with min_val=1 already blocks values below 1
+        choice = get_int("\nEnter choice (1-7): ", min_val=1)
+        while choice > 7:
+            print("  Invalid choice. Please enter a number between 1 and 7.")
+            choice = get_int("Enter choice (1-7): ", min_val=1)
 
-    #collect process data
-    needs_priority = choice in NEEDS_PRIORITY
+        # ask for quantum if needed
+        quantum = None
+        if choice in NEEDS_QUANTUM:
+            quantum = get_int("Enter Time Quantum: ", min_val=1)
 
-    n = get_int("\nEnter number of processes: ", min_val=1)
+        # collect process data
+        needs_priority = choice in NEEDS_PRIORITY
+        n = get_int("\nEnter number of processes: ", min_val=1)
 
-    processes = []
-    for i in range(n):
-        print(f"\n  -- Process {i + 1} --")
-        pid     = input("  Process ID: ").strip() or f"P{i+1}"
-        arrival = get_int("  Arrival Time: ", min_val=0)
-        burst   = get_int("  Burst Time:   ", min_val=1)
+        processes = []
+        used_ids = set()  # tracks used process IDs to prevent duplicates
 
-        priority = 0
-        if needs_priority:
-            priority = get_int("  Priority:     ")
+        for i in range(n):
+            print(f"\n  -- Process {i + 1} --")
 
-        processes.append(Process(pid, arrival, burst, priority))
+            # keep asking until a unique process ID is entered
+            while True:
+                pid = input("  Process ID: ").strip() or f"P{i+1}"
+                if pid in used_ids:
+                    print(f"  ID '{pid}' already exists. Please enter a unique ID.")
+                else:
+                    used_ids.add(pid)
+                    break
 
-    helper = Process("_", 0, 0)   # dummy instance just to call instance methods
+            arrival = get_int("  Arrival Time: ", min_val=0)
+            burst = get_int("  Burst Time:   ", min_val=1)
 
-    if choice == 1:
-        result, avg_wt, avg_tat, gantt = helper.fcfs(processes)
-    elif choice == 2:
-        result, avg_wt, avg_tat, gantt = helper.sjf(processes)
-    elif choice == 3:
-        result, avg_wt, avg_tat, gantt = helper.srt(processes)
-    elif choice == 4:
-        result, avg_wt, avg_tat, gantt = helper.round_robin(processes, quantum)
-    elif choice == 5:
-        result, avg_wt, avg_tat, gantt = helper.priority_non_preemptive(processes)
-    elif choice == 6:
-        result, avg_wt, avg_tat, gantt = helper.priority_preemptive(processes)
-    elif choice == 7:
-        result, avg_wt, avg_tat, gantt = helper.priority_rr(processes, quantum)
+            priority = 0
+            if needs_priority:
+                priority = get_int("  Priority:     ")
 
-    show_priority = needs_priority
-    print("\n" + "=" * 65)
-    if show_priority:
-        print(f"{'Process':<10}{'Arrival':<10}{'Burst':<10}{'Priority':<10}{'Waiting':<10}{'Turnaround':<12}{'End':<10}")
-    else:
-        print(f"{'Process':<10}{'Arrival':<10}{'Burst':<10}{'Waiting':<10}{'Turnaround':<12}{'End':<10}")
-    print("=" * 65)
+            processes.append(Process(pid, arrival, burst, priority))
 
-    for p in result:
-        if show_priority:
-            print(f"{p.id:<10}{p.arrival:<10}{p.burst:<10}{p.priority:<10}{p.waiting:<10}{p.turnaround:<12}{p.end:<10}")
-        else:
-            print(f"{p.id:<10}{p.arrival:<10}{p.burst:<10}{p.waiting:<10}{p.turnaround:<12}{p.end:<10}")
+        # run chosen algorithm using dummy instance to call instance methods
+        helper = Process("_", 0, 0)
 
-    print("=" * 65)
-    print(f"\nAverage Waiting Time:    {avg_wt:.2f}")
-    print(f"Average Turnaround Time: {avg_tat:.2f}")
+        if choice == 1:
+            result, avg_wt, avg_tat, gantt = helper.fcfs(processes)
+        elif choice == 2:
+            result, avg_wt, avg_tat, gantt = helper.sjf(processes)
+        elif choice == 3:
+            result, avg_wt, avg_tat, gantt = helper.srt(processes)
+        elif choice == 4:
+            result, avg_wt, avg_tat, gantt = helper.round_robin(processes, quantum)
+        elif choice == 5:
+            result, avg_wt, avg_tat, gantt = helper.priority_non_preemptive(processes)
+        elif choice == 6:
+            result, avg_wt, avg_tat, gantt = helper.priority_preemptive(processes)
+        elif choice == 7:
+            result, avg_wt, avg_tat, gantt = helper.priority_rr(processes, quantum)
 
-    scheduler = Scheduler(processes)
-    scheduler.draw_gantt_chart(gantt, result, avg_wt, avg_tat, show_priority=needs_priority)
+        # show results window no terminal table, everything in matplotlib
+        scheduler = Scheduler(processes)
+        scheduler.draw_gantt_chart(
+            gantt, result, avg_wt, avg_tat,
+            algo_name=ALGO_NAMES[choice],
+            show_priority=needs_priority
+        )
+
+        # ask to run again only accepts y or n, anything else re-prompts
+        if get_yes_no("\nRun again? (y/n): ") != 'y':
+            print("\nGoodbye!")
+            break
