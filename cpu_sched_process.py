@@ -16,6 +16,20 @@ class Process:
         self.response = None
         self.gantt = []
 
+    def _insert_idle(self, gantt):
+        #Fill gaps between consecutive gantt segments with Idle entries
+        if not gantt:
+            return gantt
+        filled = []
+        for i, seg in enumerate(gantt):
+            pid, s, e = seg[0], seg[1], seg[2]
+            if filled:
+                prev_end = filled[-1][2]
+                if s > prev_end:
+                    filled.append(("Idle", prev_end, s))
+            filled.append((pid, s, e))
+        return filled
+    
     def fcfs(self, processes):
         # sort by arrival time so earliest arrival goes first
         processes = sorted(processes, key=lambda p: p.arrival)
@@ -35,7 +49,6 @@ class Process:
             p.turnaround = p.end - p.arrival
             p.waiting = p.turnaround - p.burst
             p.response = start - p.arrival
-
             gantt.append((p.id, start, end))
 
         avg_wt = sum(p.waiting for p in processes) / len(processes)
@@ -52,10 +65,12 @@ class Process:
         while remaining:
             # only considers processes that have already arrived
             ready = [p for p in remaining if p.arrival <= time]
-
+  
             if not ready:
-                # jump to the next arrival if no process is ready
-                time = min(p.arrival for p in remaining)
+            # jump to the next arrival if no process is ready
+                next_t = min(p.arrival for p in remaining)
+                gantt.append(("Idle", time, next_t))
+                time = next_t
                 continue
 
             shortest = min(ready, key=lambda p: p.burst)  # picks the one with the shortest burst time (non-preemptive)
@@ -72,51 +87,62 @@ class Process:
             completed.append(shortest)
             remaining.remove(shortest)
 
+        gantt = self._insert_idle(gantt)
         avg_wt = sum(p.waiting for p in completed) / len(completed)
         avg_tat = sum(p.turnaround for p in completed) / len(completed)
-
         return completed, avg_wt, avg_tat, gantt
 
     def srt(self, processes):
-        time = 0
-        completed = []
-        gantt = []
-        last_pid = None
+            time = 0
+            completed = []
+            gantt = []
+            last_pid = None
 
-        while len(completed) < len(processes):
-            # filters for arrived and unfinished processes
-            ready = [p for p in processes if p.arrival <= time and p.remaining > 0]
+            while len(completed) < len(processes):
+                ready = [p for p in processes if p.arrival <= time and p.remaining > 0]
 
-            if not ready:
-                # jump to the next arrival instead of stepping one tick at a time
-                time = min(p.arrival for p in processes if p.remaining > 0)
-                continue
+                if not ready:
+                    next_t = min(p.arrival for p in processes if p.remaining > 0)
+                    if last_pid != "Idle":
+                        gantt.append(["Idle", time, next_t])
+                    else:
+                        gantt[-1][2] = next_t
+                    time = next_t
+                    last_pid = "Idle"
+                    continue
 
-            current = min(ready, key=lambda p: p.remaining)
+                current = min(ready, key=lambda p: p.remaining)
 
-            if current.response is None:
-                current.response = time - current.arrival
+                if current.response is None:
+                    current.response = time - current.arrival
 
-            # merges consecutive ticks of the same process into one gantt bar
-            if last_pid != current.id:
-                gantt.append([current.id, time, time + 1])
-            else:
-                gantt[-1][2] += 1
+                # jump to next event instead of tick-by-tick
+                next_arrival = min(
+                    (p.arrival for p in processes if p.arrival > time and p.remaining > 0),
+                    default=float('inf')
+                )
+                run_time = min(current.remaining, next_arrival - time)
 
-            current.remaining -= 1  # runs one time unit at a time so it can preempt at every tick
-            time += 1
-            last_pid = current.id
+                if last_pid != current.id:
+                    gantt.append([current.id, time, time + run_time])
+                else:
+                    gantt[-1][2] += run_time
 
-            if current.remaining == 0:
-                current.end = time
-                current.turnaround = current.end - current.arrival
-                current.waiting = current.turnaround - current.burst
-                completed.append(current)
+                current.remaining -= run_time
+                time += run_time
+                last_pid = current.id
 
-        avg_wt = sum(p.waiting for p in completed) / len(completed)
-        avg_tat = sum(p.turnaround for p in completed) / len(completed)
+                if current.remaining == 0:
+                    current.end = time
+                    current.turnaround = current.end - current.arrival
+                    current.waiting = current.turnaround - current.burst
+                    completed.append(current)
 
-        return completed, avg_wt, avg_tat, gantt
+            gantt = self._insert_idle(gantt)
+            avg_wt = sum(p.waiting for p in completed) / len(completed)
+            avg_tat = sum(p.turnaround for p in completed) / len(completed)
+
+            return completed, avg_wt, avg_tat, gantt
 
     def round_robin(self, processes, quantum):
         time = 0
@@ -133,11 +159,13 @@ class Process:
                 queue.append(processes[i])
                 i += 1
 
-            if not queue:
                 # jump to next arrival if queue is empty
-                time = processes[i].arrival
+            if not queue:
+                next_t = processes[i].arrival
+                gantt.append(("Idle", time, next_t))
+                time = next_t
                 continue
-
+            
             current = queue.popleft()
 
             if current.response is None:
@@ -164,7 +192,8 @@ class Process:
                 completed.append(current)
             else:
                 queue.append(current)  # unfinished process goes to the back of the queue
-
+                
+        gantt = self._insert_idle(gantt)
         avg_wt = sum(p.waiting for p in completed) / len(completed)
         avg_tat = sum(p.turnaround for p in completed) / len(completed)
 
@@ -179,9 +208,11 @@ class Process:
         while remaining:
             ready = [p for p in remaining if p.arrival <= time]
 
-            if not ready:
                 # jump to next arrival
-                time = min(p.arrival for p in remaining)
+            if not ready:
+                next_t = min(p.arrival for p in remaining)
+                gantt.append(("Idle", time, next_t))
+                time = next_t
                 continue
 
             # controls whether lower number = higher priority or higher number = higher priority
@@ -201,7 +232,8 @@ class Process:
             gantt.append((current.id, start, end))
             completed.append(current)
             remaining.remove(current)
-
+            
+        gantt = self._insert_idle(gantt)
         avg_wt = sum(p.waiting for p in completed) / len(completed)
         avg_tat = sum(p.turnaround for p in completed) / len(completed)
 
@@ -217,8 +249,13 @@ class Process:
             ready = [p for p in processes if p.arrival <= time and p.remaining > 0]
 
             if not ready:
-                # jump to next arrival
-                time = min(p.arrival for p in processes if p.remaining > 0)
+                next_t = min(p.arrival for p in processes if p.remaining > 0)
+                if last_pid != "Idle":
+                    gantt.append(["Idle", time, next_t])
+                else:
+                    gantt[-1][2] = next_t
+                time = next_t
+                last_pid = "Idle"
                 continue
 
             key_func = (lambda p: p.priority) if higher_priority_smaller else (lambda p: -p.priority)
@@ -242,7 +279,8 @@ class Process:
                 current.turnaround = current.end - current.arrival
                 current.waiting = current.turnaround - current.burst
                 completed.append(current)
-
+                
+        gantt = self._insert_idle(gantt)
         avg_wt = sum(p.waiting for p in completed) / len(completed)
         avg_tat = sum(p.turnaround for p in completed) / len(completed)
 
@@ -268,10 +306,10 @@ class Process:
             queue = deque(sorted_queue)
 
             if not queue:
-                # jump to next arrival
-                time = remaining[i].arrival
+                next_t = remaining[i].arrival
+                gantt.append(("Idle", time, next_t))
+                time = next_t
                 continue
-
             current = queue.popleft()
 
             if current.response is None:
@@ -295,7 +333,8 @@ class Process:
                 completed.append(current)
             else:
                 queue.append(current)
-
+        
+        gantt = self._insert_idle(gantt)
         avg_wt = sum(p.waiting for p in completed) / len(completed)
         avg_tat = sum(p.turnaround for p in completed) / len(completed)
 
@@ -343,7 +382,9 @@ class Scheduler:
 
         # dynamically size figure height based on number of process rows
         fig_h = max(7.5, 3.0 + n_rows * 0.48 + 2.2)
-        fig = plt.figure(figsize=(15, fig_h))
+        n_segments = len(gantt)
+        gantt_fig_w = max(14, min(120, n_segments * 2.5))
+        fig = plt.figure(figsize=(gantt_fig_w, fig_h))
         fig.patch.set_facecolor(BG_COLOR)
 
         # gridspec
@@ -377,7 +418,7 @@ class Scheduler:
             headers = ['Process', 'Arrival', 'Burst', 'Priority',
                        'Response', 'Waiting', 'Turnaround', 'End Time']
             rows = [[p.id, p.arrival, p.burst, p.priority,
-                     p.response, p.waiting, p.turnaround, p.end]
+                     p.response, p.waiting, p.turnaround, p.end] 
                     for p in result]
             avg_response = sum(p.response for p in result) / len(result)
             avg_row = ['— Average —', '', '', '',
@@ -393,7 +434,7 @@ class Scheduler:
                        f'{avg_response:.2f}', f'{avg_wt:.2f}', f'{avg_tat:.2f}', '']
 
         rows.append(avg_row)
-
+        
         tbl = ax_table.table(
             cellText=rows,
             colLabels=headers,
@@ -469,50 +510,62 @@ class Scheduler:
         # gantt chart
         ax_gantt = fig.add_subplot(gs[3])
         ax_gantt.set_facecolor('#ffffff')
-
         for spine in ax_gantt.spines.values():
             spine.set_edgecolor('#d4dbe8')
             spine.set_linewidth(0.8)
 
-        # assign colors to unique process ids
         unique_ids = list(dict.fromkeys(pid for pid, _, _ in gantt))
         color_map  = {pid: PALETTE[i % len(PALETTE)] for i, pid in enumerate(unique_ids)}
 
+        MIN_BAR_WIDTH = 1.2
+        MAX_BAR_WIDTH = 20.0
         bar_h = 0.52
-        for pid, start, end in gantt:
+        vis_pos = 0.0
+        tick_positions = []
+
+        for idx, (pid, start, end) in enumerate(gantt):
+            dur = end - start
+            vis_w = max(MIN_BAR_WIDTH, min(dur, MAX_BAR_WIDTH))
             color       = IDLE_COLOR if pid == 'Idle' else color_map[pid]
-            label_color = '#888888' if pid == 'Idle' else 'white'
-            ax_gantt.barh(0, end - start, left=start,
+            label_color = '#666666' if pid == 'Idle' else 'white'
+
+            ax_gantt.barh(0, vis_w, left=vis_pos,
                           color=color, edgecolor='white',
                           height=bar_h, linewidth=1.2)
-            if end - start > 0:
-                ax_gantt.text((start + end) / 2, 0, str(pid),
-                              ha='center', va='center',
-                              fontsize=8.5, fontweight='bold',
-                              color=label_color)
 
-        # time tick marks at every boundary
-        all_times = sorted(set(t for _, s, e in gantt for t in (s, e)))
-        for t in all_times:
-            ax_gantt.axvline(x=t, color='#c8d0dc', linewidth=0.7, zorder=0)
+            label = str(pid)
+            ax_gantt.text(vis_pos + vis_w / 2, 0, label,
+                          ha='center', va='center',
+                          fontsize=7.5, fontweight='bold',
+                          color=label_color, clip_on=True)
+
+            tick_positions.append((vis_pos, start))
+            vis_pos += vis_w
+
+        tick_positions.append((vis_pos, gantt[-1][2]))
+
+        seen_labels = {}
+        for vx, t in tick_positions:
+            seen_labels.setdefault(t, vx)
+
+        vx_list = list(seen_labels.values())
+        t_list  = list(seen_labels.keys())
+
+        for vx in vx_list:
+            ax_gantt.axvline(x=vx, color='#c8d0dc', linewidth=0.7, zorder=0)
 
         ax_gantt.set_yticks([])
-        ax_gantt.set_xticks(all_times)
-
-        # rotate labels if there are too many time points
-        if len(all_times) > 10:
-            ax_gantt.tick_params(axis='x', colors=TEXT_DARK, labelsize=7, rotation=45)
-        else:
-            ax_gantt.tick_params(axis='x', colors=TEXT_DARK, labelsize=8)
-
-        ax_gantt.set_xlim(0, all_times[-1])
+        ax_gantt.set_xticks(vx_list)
+        ax_gantt.set_xticklabels(t_list)
+        rot = 45 if len(vx_list) > 12 else 0
+        ax_gantt.tick_params(axis='x', colors=TEXT_DARK, labelsize=7, rotation=rot)
+        ax_gantt.set_xlim(0, vis_pos)
         ax_gantt.set_ylim(-0.6, 0.6)
         ax_gantt.set_xlabel('Time Units', color=TEXT_DARK, fontsize=9, labelpad=4)
-        ax_gantt.text(0.005, 0.93, 'Gantt Chart',
+        ax_gantt.text(0.0, 0.97, 'Gantt Chart',
                       transform=ax_gantt.transAxes,
                       fontsize=9, fontweight='bold',
                       color=TEXT_DARK, va='top')
-
         plt.show()
 
 
@@ -633,7 +686,7 @@ if __name__ == "__main__":
             algo_name=ALGO_NAMES[choice],
             show_priority=needs_priority
         )
-
+        
         # ask to run again only accepts y or n, anything else re-prompts
         if get_yes_no("\nRun again? (y/n): ") != 'y':
             print("\nGoodbye!")
