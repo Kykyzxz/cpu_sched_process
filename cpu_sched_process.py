@@ -286,7 +286,6 @@ class Process:
 
 
 # ── Softer, eye-friendly colour palette ──────────────────────────────────────
-# Process bar colours: muted teal / sage / dusty rose / warm tan / lavender / sky / clay / moss
 PALETTE       = ['#5B9BD5','#70A870','#C97B84','#C9A96E','#8B7EC8','#5BADB5','#C8765A','#7AAF7A']
 HEADER_COLOR  = '#2C3E6B'   # deep navy — panel and table header backgrounds
 ROW_ODD       = '#FFFFFF'
@@ -353,8 +352,9 @@ class CPUSchedulerApp:
         self.build_right_panel()
 
     def build_left_panel(self):
-
-        # ── 8. Button bar — pack FIRST with side='bottom' so it is always visible ──
+        # ── Button bar — packed FIRST with side='bottom' so it is ALWAYS pinned ──
+        # Packing bottom_frame before the scrollable area guarantees the buttons
+        # are never pushed off-screen regardless of how many cards appear above.
         self.bottom_frame = tk.Frame(self.left_outer, bg=PANEL_BG)
         self.bottom_frame.pack(side='bottom', fill='x', padx=20, pady=(0, 16))
 
@@ -379,17 +379,17 @@ class CPUSchedulerApp:
                                   pady=12, state='disabled')
         self.save_btn.pack(side='left', fill='x', expand=False, padx=(4, 0), ipadx=10)
 
-        # ── 1. Title ──────────────────────────────────────────────────────────
+        # ── Title ─────────────────────────────────────────────────────────────
         tk.Label(self.left_outer, text="CPU Scheduling\nSimulator",
                  bg=PANEL_BG, fg='white',
                  font=('Courier New', 16, 'bold'),
                  justify='center').pack(side='top', pady=(18, 5))
 
-        # ── 2. Divider ────────────────────────────────────────────────────────
+        # ── Decorative divider ────────────────────────────────────────────────
         tk.Frame(self.left_outer, bg=PANEL_ACCENT, height=2).pack(
             side='top', fill='x', padx=20, pady=5)
 
-        # ── 3. Algorithm section ──────────────────────────────────────────────
+        # ── Algorithm label + dropdown ────────────────────────────────────────
         self.section_label(self.left_outer, "① Algorithm")
         self.algo_var = tk.StringVar(value='FCFS — First-Come, First-Served')
         algo_cb = ttk.Combobox(self.left_outer, textvariable=self.algo_var,
@@ -399,7 +399,8 @@ class CPUSchedulerApp:
         algo_cb.pack(side='top', padx=20, pady=(0, 6), anchor='w')
         algo_cb.bind('<<ComboboxSelected>>', self.on_algo_change)  # fires when user picks an algorithm
 
-        # ── 4. Time Quantum — hidden by default, shown for RR / Priority+RR ──
+        # ── Time Quantum — hidden by default, shown for RR / Priority+RR ──────
+        # quantum_frame is packed into left_outer dynamically by on_algo_change.
         self.quantum_frame = tk.Frame(self.left_outer, bg=PANEL_BG)
         tk.Label(self.quantum_frame, text="Time Quantum",
                  bg=PANEL_BG, fg=LABEL_DIM,
@@ -412,7 +413,7 @@ class CPUSchedulerApp:
                  relief='flat').pack(anchor='w', pady=(2, 6))
         # quantum_frame is intentionally not packed here; on_algo_change controls its visibility
 
-        # ── 5. Number of Processes section ───────────────────────────────────
+        # ── Number of Processes ───────────────────────────────────────────────
         self.section_label(self.left_outer, "② Number of Processes")
         n_frame = tk.Frame(self.left_outer, bg=PANEL_BG)
         n_frame.pack(side='top', fill='x', padx=20, pady=(0, 6))
@@ -422,7 +423,6 @@ class CPUSchedulerApp:
                  bg=ENTRY_BG, fg='white',
                  insertbackground='white',
                  relief='flat').pack(side='left')
-        
         # "Set" triggers generate_process_fields which builds or rebuilds the process cards
         tk.Button(n_frame, text='Set',
                   command=self.generate_process_fields,
@@ -431,18 +431,47 @@ class CPUSchedulerApp:
                   relief='flat', cursor='hand2',
                   padx=12).pack(side='left', padx=(10, 0))
 
-        # ── 7. Pagination — pinned just above the button bar ─────────────────
-        # Packed with side='bottom' before the cards area so it is always
-        # visible regardless of how many cards or extra fields are shown above.
-        self.page_frame = tk.Frame(self.left_outer, bg=PANEL_BG)
-        self.page_frame.pack(side='bottom', fill='x', padx=20, pady=(0, 4))
+        # ── Process cards area — scrollable so cards are never cut off ──────────
+        # A canvas + scrollbar wrapper means process cards scroll vertically when
+        # there is not enough room (e.g. when the Time Quantum field is visible).
+        # page_frame lives BELOW the canvas so it is always visible.
+        self.cards_canvas  = tk.Canvas(self.left_outer, bg=PANEL_BG,
+                                       highlightthickness=0)
+        self.cards_scrollbar = ttk.Scrollbar(self.left_outer, orient='vertical',
+                                             command=self.cards_canvas.yview)
+        self.cards_canvas.configure(yscrollcommand=self.cards_scrollbar.set)
 
-        # ── 6. Process cards area ─────────────────────────────────────────────
-        self.cards_container = tk.Frame(self.left_outer, bg=PANEL_BG)
-        self.cards_container.pack(side='top', fill='x', padx=20)
+        # pack scrollbar first so it sits to the right of the canvas
+        # scrollbar is hidden by default — only shown for RR and Priority+RR
+        self.cards_canvas.pack(side='top', fill='both', expand=True)
+
+        # inner frame that holds the actual process cards
+        self.cards_container = tk.Frame(self.cards_canvas, bg=PANEL_BG)
+        self.cards_canvas.create_window((0, 0), window=self.cards_container, anchor='nw')
+
+        self.cards_container.bind('<Configure>',
+            lambda e: self.cards_canvas.configure(
+                scrollregion=self.cards_canvas.bbox('all')))
+
+        # stretch inner frame to match canvas width
+        self.cards_canvas.bind('<Configure>',
+            lambda e: self.cards_canvas.itemconfig('all', width=e.width))
+
+        # mousewheel scrolls the cards only when scrolling is active (RR / Priority+RR)
+        self.cards_canvas.bind('<Enter>',
+            lambda e: self.cards_canvas.bind_all(
+                '<MouseWheel>',
+                lambda ev: self.cards_canvas.yview_scroll(-1*(ev.delta//120), 'units'))
+            if self.get_algo_choice() in NEEDS_QUANTUM else None)
+        self.cards_canvas.bind('<Leave>',
+            lambda e: self.cards_canvas.unbind_all('<MouseWheel>'))
 
         self.process_area = tk.Frame(self.cards_container, bg=PANEL_BG)
-        self.process_area.pack(fill='x')
+        self.process_area.pack(fill='x', padx=20)
+
+        # page_frame is packed inside cards_container so it always sits right below the cards
+        self.page_frame = tk.Frame(self.cards_container, bg=PANEL_BG)
+        self.page_frame.pack(fill='x', padx=20, pady=(0, 4))
 
     def section_label(self, parent, text):
         # Reusable helper that renders a blue bold section heading in the left panel
@@ -469,6 +498,11 @@ class CPUSchedulerApp:
         self.results_inner.bind('<Configure>', self.on_results_configure)   # update scroll region on resize
         self.right_canvas.bind('<Configure>', self.on_right_canvas_resize)  # stretch inner frame to canvas width
 
+        # Mousewheel scrolling on the right panel
+        self.right_canvas.bind_all(
+            '<MouseWheel>',
+            lambda e: self.right_canvas.yview_scroll(-1*(e.delta//120), 'units'))
+
         # Placeholder label shown before any simulation has been run
         self.placeholder = tk.Label(
             self.results_inner,
@@ -491,10 +525,18 @@ class CPUSchedulerApp:
         # and rebuilds the process cards to add or remove the Priority column.
         choice = self.get_algo_choice()
         if choice in NEEDS_QUANTUM:
+            # Insert quantum_frame just above the cards canvas so it never displaces pagination
             self.quantum_frame.pack(side='top', fill='x', padx=20,
-                                    before=self.cards_container)
+                                    before=self.cards_canvas)
+            # Enable scrolling on the cards canvas — extra space is taken by the quantum field
+            self.cards_canvas.configure(yscrollcommand=self.cards_scrollbar.set)
+            self.cards_scrollbar.pack(side='right', fill='y',
+                                      before=self.cards_canvas)
         else:
             self.quantum_frame.pack_forget()
+            # Disable scrolling for algorithms that don't need the quantum field
+            self.cards_canvas.configure(yscrollcommand='')
+            self.cards_scrollbar.pack_forget()
         if self.process_entries:
             self.generate_process_fields()
 
