@@ -285,7 +285,7 @@ class Process:
         return completed, avg_wt, avg_tat, gantt
 
 
-# ── Softer, eye-friendly colour palette ──────────────────────────────────────
+# Softer, eye-friendly colour palette
 PALETTE       = ['#5B9BD5','#70A870','#C97B84','#C9A96E','#8B7EC8','#5BADB5','#C8765A','#7AAF7A']
 HEADER_COLOR  = '#2C3E6B'   # deep navy — panel and table header backgrounds
 ROW_ODD       = '#FFFFFF'
@@ -328,7 +328,7 @@ class CPUSchedulerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("CPU Scheduling Simulator")
-        self.root.configure(bg='#F0F4FF')
+        self.root.configure(bg='#1E2A45')
         self.root.state('zoomed')            # launch the window already maximized
 
         self.process_entries = []            # list of dicts, one dict per process card
@@ -339,12 +339,12 @@ class CPUSchedulerApp:
         self.build_layout()
 
     def build_layout(self):
-        # ── Left panel: fixed width, never shrinks ────────────────────────────
+        #  Left panel: fixed width, never shrinks
         self.left_outer = tk.Frame(self.root, bg=PANEL_BG, width=390)
         self.left_outer.pack(side='left', fill='y')
         self.left_outer.pack_propagate(False)
 
-        # ── Right panel fills the rest ────────────────────────────────────────
+        #  Right panel fills the rest 
         self.right_frame = tk.Frame(self.root, bg=BG_COLOR)
         self.right_frame.pack(side='right', fill='both', expand=True)
 
@@ -352,7 +352,7 @@ class CPUSchedulerApp:
         self.build_right_panel()
 
     def build_left_panel(self):
-        # ── Button bar — packed FIRST with side='bottom' so it is ALWAYS pinned ──
+        #  Button bar — packed FIRST with side='bottom' so it is ALWAYS pinned 
         # Packing bottom_frame before the scrollable area guarantees the buttons
         # are never pushed off-screen regardless of how many cards appear above.
         self.bottom_frame = tk.Frame(self.left_outer, bg=PANEL_BG)
@@ -379,17 +379,17 @@ class CPUSchedulerApp:
                                   pady=12, state='disabled')
         self.save_btn.pack(side='left', fill='x', expand=False, padx=(4, 0), ipadx=10)
 
-        # ── Title ─────────────────────────────────────────────────────────────
+        # Title 
         tk.Label(self.left_outer, text="CPU Scheduling\nSimulator",
                  bg=PANEL_BG, fg='white',
                  font=('Courier New', 16, 'bold'),
                  justify='center').pack(side='top', pady=(18, 5))
 
-        # ── Decorative divider ────────────────────────────────────────────────
+        # Decorative divider
         tk.Frame(self.left_outer, bg=PANEL_ACCENT, height=2).pack(
             side='top', fill='x', padx=20, pady=5)
 
-        # ── Algorithm label + dropdown ────────────────────────────────────────
+        # Algorithm label + dropdown
         self.section_label(self.left_outer, "① Algorithm")
         self.algo_var = tk.StringVar(value='FCFS — First-Come, First-Served')
         algo_cb = ttk.Combobox(self.left_outer, textvariable=self.algo_var,
@@ -399,7 +399,7 @@ class CPUSchedulerApp:
         algo_cb.pack(side='top', padx=20, pady=(0, 6), anchor='w')
         algo_cb.bind('<<ComboboxSelected>>', self.on_algo_change)  # fires when user picks an algorithm
 
-        # ── Time Quantum — hidden by default, shown for RR / Priority+RR ──────
+        #  Time Quantum — hidden by default, shown for RR / Priority+RR 
         # quantum_frame is packed into left_outer dynamically by on_algo_change.
         self.quantum_frame = tk.Frame(self.left_outer, bg=PANEL_BG)
         tk.Label(self.quantum_frame, text="Time Quantum",
@@ -413,7 +413,7 @@ class CPUSchedulerApp:
                  relief='flat').pack(anchor='w', pady=(2, 6))
         # quantum_frame is intentionally not packed here; on_algo_change controls its visibility
 
-        # ── Number of Processes ───────────────────────────────────────────────
+        # Number of Processes 
         self.section_label(self.left_outer, "② Number of Processes")
         n_frame = tk.Frame(self.left_outer, bg=PANEL_BG)
         n_frame.pack(side='top', fill='x', padx=20, pady=(0, 6))
@@ -431,9 +431,9 @@ class CPUSchedulerApp:
                   relief='flat', cursor='hand2',
                   padx=12).pack(side='left', padx=(10, 0))
 
-        # ── Process cards area — scrollable so cards are never cut off ──────────
+        # Process cards area — scrollable so cards are never cut off 
         # A canvas + scrollbar wrapper means process cards scroll vertically when
-        # there is not enough room (e.g. when the Time Quantum field is visible).
+        # there is not enough room when the Time Quantum field is visible
         # page_frame lives BELOW the canvas so it is always visible.
         self.cards_canvas  = tk.Canvas(self.left_outer, bg=PANEL_BG,
                                        highlightthickness=0)
@@ -780,10 +780,10 @@ class CPUSchedulerApp:
         ax_title.axis('off')
         ax_title.text(0.5, 0.68, 'CPU Scheduling Simulator',
                       ha='center', va='center', transform=ax_title.transAxes,
-                      fontsize=13, fontweight='bold', color='#FFFFFF')
+                      fontsize=13, fontweight='bold', color='#1E2A45')
         ax_title.text(0.5, 0.22, f'Algorithm:  {algo_name}',  # subtitle shows which algorithm was run
                       ha='center', va='center', transform=ax_title.transAxes,
-                      fontsize=9, fontweight='bold', color='#FFD700')
+                      fontsize=9, fontweight='bold', color='#1E2A45')
 
         # Results table — columns vary based on whether the algorithm uses priority
         ax_table = fig.add_subplot(gs[1])
