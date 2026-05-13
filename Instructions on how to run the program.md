@@ -1,5 +1,6 @@
 How to install
 - Install python extension
+- python --version (to verify the python installation)
 How to install library that is used
 - Open terminal
 - pip install matplotlib or python -m pip install matplotlib
