@@ -655,7 +655,13 @@ class CPUSchedulerApp:
         if not self.process_entries:
             messagebox.showerror("Error", "Please set the number of processes first.")
             return
-
+        try:
+            if len(self.process_entries) < 3:
+                raise ValueError("Minimum of 3 processes is required to run the simulation.")
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+            return
+        
         choice         = self.get_algo_choice()
         needs_priority = choice in NEEDS_PRIORITY
 
