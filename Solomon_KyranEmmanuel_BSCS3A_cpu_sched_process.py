@@ -273,9 +273,9 @@ class Process:
                 queue.append(remaining[i])
                 i += 1
             if current.remaining == 0:
-                current.end        = time
+                current.end  = time
                 current.turnaround = current.end - current.arrival
-                current.waiting    = current.turnaround - current.burst
+                current.waiting = current.turnaround - current.burst
                 completed.append(current)
             else:
                 queue.append(current)                       # not finished — re-queue it
